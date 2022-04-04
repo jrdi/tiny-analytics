@@ -1,0 +1,71 @@
+TOKEN api_token READ
+
+NODE stats_daily
+SQL >
+
+    %
+    SELECT * FROM (
+      select toDate(arrayJoin(range(
+         toUInt32(toStartOfDay(now() -
+           {% if timespan == '30d' %}
+             interval 30 day
+           {% else %}
+             interval 7 day
+           {% end %})),
+         toUInt32(now()),
+         24 * 3600
+      ))) as t
+    ) LEFT JOIN (
+      SELECT
+        toDate(timestamp) t,
+        count() visits,
+        uniq(uuid) uniq_users
+      FROM ds_tiny_analytics
+      WHERE event = 'pageload'
+        AND timestamp >= now() -
+          {% if timespan == '30d' %}
+            interval 30 day
+          {% else %}
+            interval 7 day
+          {% end %}
+      GROUP BY t
+      order by t desc, visits desc
+    ) USING t
+    ORDER BY t desc
+
+
+
+NODE stats_hourly
+SQL >
+
+    %
+    SELECT * FROM (
+      select toStartOfHour(toDateTime(arrayJoin(range(
+         toUInt32(toStartOfHour(now() - INTERVAL 1 day)),
+         toUInt32(now()),
+         3600
+      )))) as t
+    ) LEFT JOIN (
+      SELECT
+        toStartOfHour(timestamp) t,
+        count() visits,
+        uniq(uuid) uniq_users
+      FROM ds_tiny_analytics
+      WHERE event = 'pageload'
+        AND timestamp >= now() - interval 1 day
+      GROUP BY t
+      order by t desc, visits desc
+    ) USING t
+    ORDER BY t desc
+
+
+
+NODE stats_all
+SQL >
+
+    %
+    {% if timespan == '24h' %}
+      SELECT * FROM stats_hourly
+    {% else %}
+      SELECT * FROM stats_daily
+    {% end %}
